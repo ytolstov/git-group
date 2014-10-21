@@ -1,0 +1,91 @@
+#!/bin/bash
+#*******************************************************************************
+# Functions
+#*******************************************************************************
+function show-active-branches() {
+   echo "Active branches:"
+   BRANCH=$(git name-rev HEAD 2> /dev/null | awk '{print $2}')
+   echo "   Superproject = $BRANCH"
+   for smod in $SUBMODS; do
+      cd $ROOTD/$smod
+      BRANCH=$(git name-rev HEAD 2> /dev/null | awk '{print $2}')
+      echo "   Submodule $smod = $BRANCH"
+   done
+}
+
+#*******************************************************************************
+# Program
+#*******************************************************************************
+CMD=$1
+
+ROOTD=$(pwd)
+if test ! -d .git; then
+   echo "Command should be executed from the root of Git repository"
+   exit 1
+fi
+
+SUBMODS=$(cat .gitmodules | awk -F\" '/\[submodule.*\]/ { print $2 }')
+
+case $CMD in
+#===============================================================================
+   branch)
+#===============================================================================
+show-active-branches
+;;
+#===============================================================================
+   switch-branch)
+#===============================================================================
+TGTBRANCH=$2
+for smod in $SUBMODS; do
+   echo "~~~~~~~~ Submodule: ${smod^^}"
+   cd $ROOTD/$smod
+   git checkout $TGTBRANCH
+done
+show-active-branches
+;;
+#===============================================================================
+   update)
+#===============================================================================
+git pull
+git submodule update --init --recursive
+# git clone --recurse-submodules  -- Consider this
+;;
+#===============================================================================
+   pull)
+#===============================================================================
+for smod in $SUBMODS; do
+   echo "~~~~~~~~ Submodule: ${smod^^}"
+   cd $ROOTD/$smod
+   git pull
+done
+;;
+#===============================================================================
+   status)
+#===============================================================================
+echo "-------------------------------------------------------------------------------"
+echo "Superproject status:"
+echo "-------------------------------------------------------------------------------"
+git status
+for smod in $SUBMODS; do
+   echo "-------------------------------------------------------------------------------"
+   echo "Submodule ${smod^^} status:"
+   echo "-------------------------------------------------------------------------------"
+   cd $ROOTD/$smod
+   git status
+done
+;;
+#===============================================================================
+   *)
+#===============================================================================
+echo "Submodules:"
+git submodule
+echo ""
+echo "Group commands and parameters (applied to all submodules):"
+echo "   status"
+echo "   update"
+echo "   pull"
+echo "   branch"
+echo "   switch-branch"
+;;
+esac
+
