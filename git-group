@@ -3,55 +3,47 @@
 # Functions
 #*******************************************************************************
 #===============================================================================
-function show_active_branches() {
+function show_active_branches {
 #===============================================================================
     echo "Active branches:"
-    BRANCH=$(git name-rev HEAD 2> /dev/null | awk '{print $2}')
-    echo -e "   ROOT:\t$BRANCH"
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    printf '   %-15s %-20s\n' "ROOT" "$BRANCH"
     for smod in $SUBMODS; do
         pushd $smod > /dev/null
-        BRANCH=$(git name-rev HEAD 2> /dev/null | awk '{print $2}')
-        echo -e "   ${smod^^}\t$BRANCH"
+        BRANCH=$(git rev-parse --abbrev-ref HEAD)
+        printf '   %-15s %-20s\n' "${smod^^}" "$BRANCH"
         popd > /dev/null
     done
 }
 
 #===============================================================================
-function exec_gitgroup_commands() {
+function exec_gitgroup_command {
 #===============================================================================
-    local xcmd=$1   
-    local gitcmd=$2   
-    local gitcmd2=$3   
     echo "-------------------------------------------------------------------------------"
     echo -e "\tROOT"
     echo "-------------------------------------------------------------------------------"
-    case $xcmd in
-    --show-branch)
+    case $PREACT in
+    show-branch)
         CBRANCH=$(git symbolic-ref -q --short HEAD)
         echo "Branch = $CBRANCH"
         ;;
     *) ;;
     esac
-    git $gitcmd $TGTBRANCH
-    if test "$gitcmd2" != ""; then
-        git $gitcmd2 $TGTBRANCH
-    fi
+    git "$@"
     for smod in $SUBMODS; do
-        echo "-------------------------------------------------------------------------------"
-        echo -e "\t${smod^^}"
-        echo "-------------------------------------------------------------------------------"
         pushd $smod > /dev/null
-        case $xcmd in
-        --show-branch)
+        MODTYPE=$(if test -f .git; then echo "submodule"; fi)
+        echo "-------------------------------------------------------------------------------"
+        echo -e "\t${smod^^} ($MODTYPE)"
+        echo "-------------------------------------------------------------------------------"
+        case $PREACT in
+        show-branch)
             CBRANCH=$(git symbolic-ref -q --short HEAD)
             echo "Branch = $CBRANCH"
             ;;
         *) ;;
         esac
-        git $gitcmd $TGTBRANCH
-        if test "$gitcmd2" != ""; then
-            git $gitcmd2 $TGTBRANCH
-        fi
+        git "$@"
         popd > /dev/null
     done
 }
@@ -62,12 +54,14 @@ function exec_gitgroup_commands() {
 CMD=$1
 
 ROOTD=$(pwd)
-if test ! -d .git; then
-    echo "Command should be executed from the root of Git repository"
+if test -d ../.git; then
+    echo "ERROR: Command should be executed from the root of Git repository"
     exit 1
 fi
+SUBMODS=$(find . -maxdepth 2 -name .git | sed -e 's/\.git//g' | awk -F/ '{print $2}' | sort)
 
-SUBMODS=$(find . -maxdepth 2 -type d -name .git | sed -e 's/\.git//g' | awk -F/ '{print $2}' | sort)
+PREACT=none
+POSTACT=none
 
 case $CMD in
 #===============================================================================
@@ -77,29 +71,44 @@ if test -f .gitmodules; then
     echo "Submodules:"
     git submodule
 fi
-exec_gitgroup_commands --none status
+PREACT=none
 ;;
 #===============================================================================
     fetch)
 #===============================================================================
-exec_gitgroup_commands --show-branch fetch
+PREACT=show-branch
+POSTACT=none
 ;;
 #===============================================================================
     pull)
 #===============================================================================
-exec_gitgroup_commands --show-branch pull
+PREACT=show-branch
+POSTACT=none
+;;
+#===============================================================================
+    push)
+#===============================================================================
+PREACT=show-branch
+POSTACT=none
 ;;
 #===============================================================================
     branch)
 #===============================================================================
-show_active_branches
+PREACT=none
+POSTACT=none
 ;;
 #===============================================================================
-    switch-branch)
+    tag)
 #===============================================================================
-TGTBRANCH=$2
-exec_gitgroup_commands --none checkout
-show_active_branches
+PREACT=none
+POSTACT=none
+;;
+#===============================================================================
+    checkout)
+#===============================================================================
+PREACT=none
+POSTACT=none
+# show_active_branches
 ;;
 #===============================================================================
    help | *)
@@ -108,8 +117,15 @@ echo "Group commands and parameters (applied to all submodules):"
 echo "   status"
 echo "   fetch"
 echo "   pull"
+echo "   push"
 echo "   branch"
-echo "   switch-branch"
+echo "   tag"
+echo "   checkout"
+exit 0
 ;;
 esac
+#--------------------------------------------------------------------------------
+# Git command
+#--------------------------------------------------------------------------------
+exec_gitgroup_command "$@"
 
